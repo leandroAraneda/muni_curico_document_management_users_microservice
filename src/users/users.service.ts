@@ -18,7 +18,7 @@ export class UsersService extends PrismaClient implements OnModuleInit {
     const resp = await this.users.create({
       data: createUserDto,
     });
-    7
+
     const resp_data = {
       ...resp,
       roleId: resp.roleId.toString(),
@@ -27,8 +27,15 @@ export class UsersService extends PrismaClient implements OnModuleInit {
     return resp_data;
   }
 
-  findAll() {
-    return `This action returns all users`;
+  async findAll() {
+    const users = await this.users.findMany();
+
+    const users_data = users.map(user => ({
+      ...user,
+      roleId: user.roleId ? user.roleId.toString() : null,
+    }));
+
+    return users_data;
   }
 
   findOne(id: number) {

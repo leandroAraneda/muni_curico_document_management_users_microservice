@@ -15,10 +15,10 @@ export class UsersController {
     return this.usersService.create(createUserDto);
   }
 
-  // @MessagePattern('findAllUsers')
-  // findAll() {
-  //   return this.usersService.findAll();
-  // }
+  @MessagePattern({ cmd: 'findAllUsers' })
+  findAll() {
+    return this.usersService.findAll();
+  }
 
   // @MessagePattern('findOneUser')
   // findOne(@Payload() id: number) {
