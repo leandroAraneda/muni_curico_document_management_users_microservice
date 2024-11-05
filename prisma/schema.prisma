@@ -8,14 +8,19 @@ datasource db {
 }
 
 model users {
-  id        String   @id @default(uuid())
-  name      String
-  lastname  String
-  email     String
-  password  String
-  status    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  id                String   @id @default(uuid())
+  rut               String   @unique
+  first_name        String
+  second_name       String
+  paternal_lastname String
+  maternal_lastname String
+  email             String   @unique
+  image             String?
+  password          String
+  creator_user      String
+  status            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
 
   roles  roles?  @relation(fields: [roleId], references: [id])
   roleId BigInt?
