@@ -38,7 +38,6 @@ export class AuthService extends PrismaClient implements OnModuleInit {
                 user: user,
                 token: await this.singJWT(user),
             }
-
         } catch (error) {
             throw new RpcException({
                 status: 401,
