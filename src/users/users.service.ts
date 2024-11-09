@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as bcrypt from 'bcrypt';
+import * as sharp from 'sharp';
 const { v4: uuidv4 } = require('uuid');
 import { PrismaClient } from '@prisma/client';
 
@@ -216,9 +217,7 @@ export class UsersService extends PrismaClient implements OnModuleInit {
 
   async update(id: string, type: string, file?: Express.Multer.File) {
     try {
-      // validate image type
       const validImageTypes = ['users', 'persons'];
-
       if (!validImageTypes.includes(type)) {
         throw new RpcException({
           status: 400,
@@ -226,13 +225,9 @@ export class UsersService extends PrismaClient implements OnModuleInit {
         });
       }
 
-      // check if the file is valid
       if (file && Buffer.isBuffer(file.buffer)) {
-        // process image
         const cutName = file.originalname.split('.');
-        const extensionFile = cutName[cutName.length - 1];
-
-        //validate extension
+        const extensionFile = cutName[cutName.length - 1].toLowerCase();
         const validExtensions = ['png', 'jpg', 'jpeg', 'gif'];
 
         if (!validExtensions.includes(extensionFile)) {
@@ -242,10 +237,7 @@ export class UsersService extends PrismaClient implements OnModuleInit {
           });
         }
 
-        // generate file name
         const fileName = `${uuidv4()}.${extensionFile}`;
-
-        // path to save the image
         const uploadsPath = path.join(__dirname, '..', 'uploads', type);
 
         if (!fs.existsSync(uploadsPath)) {
@@ -253,9 +245,12 @@ export class UsersService extends PrismaClient implements OnModuleInit {
         }
 
         const filePath = path.join(uploadsPath, fileName);
-        fs.writeFileSync(filePath, file.buffer);
 
-        // update image in database
+        // process image (size and KB)
+        const processedImageBuffer = await this.processImage(file.buffer);
+
+        fs.writeFileSync(filePath, processedImageBuffer);
+
         await this.updateImage(id, type, fileName);
 
         return {
@@ -277,6 +272,32 @@ export class UsersService extends PrismaClient implements OnModuleInit {
     }
   }
 
+  async processImage(imageBuffer: Buffer): Promise<Buffer> {
+    const maxSize = 50 * 1024; // 50 KB
+
+    // get image info
+    const metadata = await sharp(imageBuffer).metadata();
+
+    // the image exceeds 50 KB
+    if (imageBuffer.length > maxSize) {
+      let quality = 80;
+      let compressedBuffer = imageBuffer;
+
+      // reduce quality until size is less than 50 KB
+      while (compressedBuffer.length > maxSize && quality > 10) {
+        compressedBuffer = await sharp(imageBuffer)
+          .jpeg({ quality })
+          .toBuffer();
+        quality -= 10;
+      }
+
+      return compressedBuffer;
+    }
+
+    // If none of the conditions are met, the original buffer is returned
+    return imageBuffer;
+  }
+
   async updateImage(id: string, type: string, fileName: string) {
     let oldPath = '';
 
@@ -284,14 +305,10 @@ export class UsersService extends PrismaClient implements OnModuleInit {
       case 'users':
         const user = await this.users.findUnique({
           where: { id },
-          select: {
-            image: true
-          }
+          select: { image: true }
         });
 
-        if (!user) {
-          return false;
-        }
+        if (!user) return false;
 
         oldPath = `${process.cwd()}/dist/uploads/users/${user.image}`;
         this.deleteImage(oldPath);
@@ -300,20 +317,14 @@ export class UsersService extends PrismaClient implements OnModuleInit {
           where: { id },
           data: { image: fileName }
         });
-
         return true;
-        break;
       case 'persons':
         const person = await this.users.findUnique({
           where: { id },
-          select: {
-            image: true
-          }
+          select: { image: true }
         });
 
-        if (!person) {
-          return false;
-        }
+        if (!person) return false;
 
         oldPath = `${process.cwd()}/dist/uploads/persons/${person.image}`;
         this.deleteImage(oldPath);
@@ -322,15 +333,12 @@ export class UsersService extends PrismaClient implements OnModuleInit {
           where: { id },
           data: { image: fileName }
         });
-
         return true;
-        break
     }
   }
 
   deleteImage(path: string) {
     if (fs.existsSync(path)) {
-      // delete old image
       fs.unlinkSync(path);
     }
   }
@@ -346,6 +354,4 @@ export class UsersService extends PrismaClient implements OnModuleInit {
       )
     );
   }
-
-
 }

@@ -59,7 +59,7 @@ export class AuthService extends PrismaClient implements OnModuleInit {
             if (!user) {
                 throw new RpcException({
                     status: 401,
-                    message: 'No se encontró un usuario con las credenciales proporcionadas.',
+                    message: 'A user with the provided credentials was not found.',
                 });
             }
 
@@ -68,7 +68,7 @@ export class AuthService extends PrismaClient implements OnModuleInit {
             if (!isPasswordValid) {
                 throw new RpcException({
                     status: 401,
-                    message: 'No se encontró un usuario con las credenciales proporcionadas.',
+                    message: 'A user with the provided credentials was not found.',
                 });
             }
 
