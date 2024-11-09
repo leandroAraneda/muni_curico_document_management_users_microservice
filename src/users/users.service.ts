@@ -217,6 +217,7 @@ export class UsersService extends PrismaClient implements OnModuleInit {
 
   async update(id: string, type: string, file?: Express.Multer.File) {
     try {
+      // validate image types
       const validImageTypes = ['users', 'persons'];
       if (!validImageTypes.includes(type)) {
         throw new RpcException({
@@ -225,18 +226,19 @@ export class UsersService extends PrismaClient implements OnModuleInit {
         });
       }
 
+      // validate file extensions
+      const cutName = file.originalname.split('.');
+      const extensionFile = cutName[cutName.length - 1].toLowerCase();
+      const validExtensions = ['png', 'jpg', 'jpeg'];
+
+      if (!validExtensions.includes(extensionFile)) {
+        throw new RpcException({
+          status: 415,
+          message: 'Unsupported Media Type: Invalid image extension.',
+        });
+      }
+
       if (file && Buffer.isBuffer(file.buffer)) {
-        const cutName = file.originalname.split('.');
-        const extensionFile = cutName[cutName.length - 1].toLowerCase();
-        const validExtensions = ['png', 'jpg', 'jpeg', 'gif'];
-
-        if (!validExtensions.includes(extensionFile)) {
-          throw new RpcException({
-            status: 415,
-            message: 'Unsupported Media Type: Invalid image extension.',
-          });
-        }
-
         const fileName = `${uuidv4()}.${extensionFile}`;
         const uploadsPath = path.join(__dirname, '..', 'uploads', type);
 
@@ -248,7 +250,6 @@ export class UsersService extends PrismaClient implements OnModuleInit {
 
         // process image (size and KB)
         const processedImageBuffer = await this.processImage(file.buffer);
-
         fs.writeFileSync(filePath, processedImageBuffer);
 
         await this.updateImage(id, type, fileName);
@@ -274,9 +275,6 @@ export class UsersService extends PrismaClient implements OnModuleInit {
 
   async processImage(imageBuffer: Buffer): Promise<Buffer> {
     const maxSize = 50 * 1024; // 50 KB
-
-    // get image info
-    const metadata = await sharp(imageBuffer).metadata();
 
     // the image exceeds 50 KB
     if (imageBuffer.length > maxSize) {
