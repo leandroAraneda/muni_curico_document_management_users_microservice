@@ -39,6 +39,7 @@ export class UsersService extends PrismaClient implements OnModuleInit {
           paternal_lastname: true,
           maternal_lastname: true,
           email: true,
+          image: true,
           creator_user: true,
           status: true,
           createdAt: true,
