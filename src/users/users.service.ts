@@ -77,46 +77,98 @@ export class UsersService extends PrismaClient implements OnModuleInit {
     }
   }
 
-  async findUser(id: string) {
-    const user = await this.users.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        rut: true,
-        first_name: true,
-        second_name: true,
-        paternal_lastname: true,
-        maternal_lastname: true,
-        email: true,
-        creator_user: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-        roles: {
-          select: {
-            id: true,
-            name: true,
+  async findAllUsers() {
+    try {
+      const users = await this.users.findMany({
+        select: {
+          id: true,
+          first_name: true,
+          second_name: true,
+          paternal_lastname: true,
+          maternal_lastname: true,
+          email: true,
+          status: true,
+          roles: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    if (!user) {
+      if (!users) {
+        throw new RpcException({
+          status: 204,
+          message: 'No user data.',
+        });
+      }
+
+      const users_data = users.map(user => this.convertBigInts({
+        ...user,
+        roles: user.roles ? {
+          ...user.roles,
+          id: user.roles.id ? user.roles.id.toString() : null,
+        } : null,
+      }));
+
+      return users_data;
+    } catch (error) {
       throw new RpcException({
-        status: 204,
-        message: `There are no users with the d: ${id}`,
+        status: 500,
+        message: error.message,
       });
     }
+  }
 
-    const user_data = this.convertBigInts({
-      ...user,
-      roles: user.roles ? {
-        ...user.roles,
-        id: user.roles.id ? user.roles.id.toString() : null,
-      } : null,
-    });
+  async findUser(id: string) {
+    try {
+      const user = await this.users.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          rut: true,
+          first_name: true,
+          second_name: true,
+          paternal_lastname: true,
+          maternal_lastname: true,
+          email: true,
+          image: true,
+          creator_user: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+          roles: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
 
-    return user_data;
+      if (!user) {
+        throw new RpcException({
+          status: 204,
+          message: `There are no users with the d: ${id}`,
+        });
+      }
+
+      const user_data = this.convertBigInts({
+        ...user,
+        roles: user.roles ? {
+          ...user.roles,
+          id: user.roles.id ? user.roles.id.toString() : null,
+        } : null,
+      });
+
+      return user_data;
+    } catch (error) {
+      throw new RpcException({
+        status: 500,
+        message: error.message || 'An error occurred while fetching the image.',
+      });
+    }
   }
 
   async findImage(type: string, fileName: string) {

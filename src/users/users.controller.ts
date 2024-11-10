@@ -8,12 +8,17 @@ import { CreateUserDto } from './dto/create-user.dto';
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
-  @MessagePattern({ cmd: 'findAllUsers' })
+  @MessagePattern({ cmd: 'findAll' })
   findAll() {
     return this.usersService.findAll();
   }
 
-  @MessagePattern({ cmd: 'findUsers' })
+  @MessagePattern({ cmd: 'findAllUsers' })
+  findAllUsers() {
+    return this.usersService.findAllUsers();
+  }
+
+  @MessagePattern({ cmd: 'findUser' })
   findUser(@Payload() id: string) {
     return this.usersService.findUser(id);
   }
