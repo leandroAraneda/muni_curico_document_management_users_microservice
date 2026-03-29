@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { RpcException } from '@nestjs/microservices';
 
@@ -39,10 +39,10 @@ export class AuthService extends PrismaClient implements OnModuleInit {
                 token: await this.singJWT(user),
             }
         } catch (error) {
-            throw new RpcException({
+            return {
                 status: 401,
                 message: 'Invalid token'
-            })
+            }
         }
     }
 
@@ -55,22 +55,23 @@ export class AuthService extends PrismaClient implements OnModuleInit {
                     email: email,
                     status: true
                 },
+                include: {
+                    roles: {
+                        select: {
+                            name: true
+                        }
+                    }
+                }
             });
 
             if (!user) {
-                throw new RpcException({
-                    status: 401,
-                    message: 'A user with the provided credentials was not found.',
-                });
+                throw new UnauthorizedException('Invalid credentials');
             }
 
             const isPasswordValid = bcrypt.compareSync(password, user.password);
 
             if (!isPasswordValid) {
-                throw new RpcException({
-                    status: 401,
-                    message: 'A user with the provided credentials was not found.',
-                });
+                throw new UnauthorizedException('Invalid credentials');
             }
 
             const { password: __, roleId, ...rest } = user;

@@ -25,6 +25,10 @@ export class CreateUserDto {
     email: string;
 
     @IsString()
+    @MaxLength(100)
+    image: string;
+
+    @IsString()
     password: string;
 
     @IsString()

@@ -1,14 +1,13 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 import { JwtService } from '@nestjs/jwt';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as bcrypt from 'bcrypt';
-import * as sharp from 'sharp';
-const { v4: uuidv4 } = require('uuid');
+
 import { PrismaClient } from '@prisma/client';
 
+import * as bcrypt from 'bcrypt';
+
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 
 @Injectable()
@@ -28,7 +27,7 @@ export class UsersService extends PrismaClient implements OnModuleInit {
     return this.jwtService.sign(payload);
   }
 
-  async findAll() {
+  async findAllUsers() {
     try {
       const users = await this.users.findMany({
         select: {
@@ -53,11 +52,11 @@ export class UsersService extends PrismaClient implements OnModuleInit {
         },
       });
 
-      if (!users) {
-        throw new RpcException({
+      if (!users.length) {
+        return {
           status: 204,
           message: 'No user data.',
-        });
+        };
       }
 
       const users_data = users.map(user => this.convertBigInts({
@@ -77,7 +76,7 @@ export class UsersService extends PrismaClient implements OnModuleInit {
     }
   }
 
-  async findAllUsers() {
+  async findUsers() {
     try {
       const users = await this.users.findMany({
         select: {
@@ -95,13 +94,16 @@ export class UsersService extends PrismaClient implements OnModuleInit {
             },
           },
         },
+        orderBy: {
+          paternal_lastname: 'asc',
+        },
       });
 
-      if (!users) {
-        throw new RpcException({
+      if (!users.length) {
+        return {
           status: 204,
           message: 'No user data.',
-        });
+        };
       }
 
       const users_data = users.map(user => this.convertBigInts({
@@ -148,10 +150,10 @@ export class UsersService extends PrismaClient implements OnModuleInit {
       });
 
       if (!user) {
-        throw new RpcException({
+        return {
           status: 204,
-          message: `There are no users with the d: ${id}`,
-        });
+          message: 'No user data.',
+        };
       }
 
       const user_data = this.convertBigInts({
@@ -163,38 +165,6 @@ export class UsersService extends PrismaClient implements OnModuleInit {
       });
 
       return user_data;
-    } catch (error) {
-      throw new RpcException({
-        status: 500,
-        message: error.message || 'An error occurred while fetching the image.',
-      });
-    }
-  }
-
-  async findImage(type: string, fileName: string) {
-    try {
-      const validImageTypes = ['users', 'persons'];
-
-      if (!validImageTypes.includes(type)) {
-        throw new RpcException({
-          status: 400,
-          message: 'Invalid image type.',
-        });
-      }
-
-      let pathImage = path.join(process.cwd(), 'dist', 'uploads', type, fileName);
-
-      if (!fs.existsSync(pathImage)) {
-        pathImage = path.join(process.cwd(), 'dist', 'uploads', 'no-image.png');
-      }
-
-      const imageBuffer = fs.readFileSync(pathImage).toString('base64');
-
-      return {
-        imageBuffer,
-        contentType: 'image/jpeg',
-      };
-
     } catch (error) {
       throw new RpcException({
         status: 500,
@@ -227,10 +197,10 @@ export class UsersService extends PrismaClient implements OnModuleInit {
       });
 
       if (user) {
-        throw new RpcException({
+        return {
           status: 400,
           message: 'User already exists',
-        });
+        };
       }
 
       const newUser = await this.users.create({
@@ -252,14 +222,14 @@ export class UsersService extends PrismaClient implements OnModuleInit {
       const serializedUser = {
         ...rest,
         name: `${first_name} ${paternal_lastname}`,
-        roleId: Number(roleId),
+        roleId: Number(roleId)
       };
 
       return {
         user: serializedUser,
         token: await this.singJWT(serializedUser),
+        status: 201
       };
-
     } catch (error) {
       throw new RpcException({
         status: 400,
@@ -268,134 +238,92 @@ export class UsersService extends PrismaClient implements OnModuleInit {
     }
   }
 
-  async update(id: string, type: string, file?: Express.Multer.File) {
+  async updateUser(id: string, updateUserDto: UpdateUserDto) {
     try {
-      // validate image types
-      const validImageTypes = ['users', 'persons'];
-      if (!validImageTypes.includes(type)) {
-        throw new RpcException({
-          status: 400,
-          message: 'Invalid image type.',
-        });
-      }
+      let { id: __, ...data } = updateUserDto;
 
-      // validate file extensions
-      const cutName = file.originalname.split('.');
-      const extensionFile = cutName[cutName.length - 1].toLowerCase();
-      const validExtensions = ['png', 'jpg', 'jpeg'];
+      const currentUser = await this.users.findUnique({
+        where: { id },
+        select: { email: true }
+      });
 
-      if (!validExtensions.includes(extensionFile)) {
-        throw new RpcException({
-          status: 415,
-          message: 'Unsupported Media Type: Invalid image extension.',
-        });
-      }
-
-      if (file && Buffer.isBuffer(file.buffer)) {
-        const fileName = `${uuidv4()}.${extensionFile}`;
-        const uploadsPath = path.join(__dirname, '..', 'uploads', type);
-
-        if (!fs.existsSync(uploadsPath)) {
-          fs.mkdirSync(uploadsPath, { recursive: true });
-        }
-
-        const filePath = path.join(uploadsPath, fileName);
-
-        // process image (size and KB)
-        const processedImageBuffer = await this.processImage(file.buffer);
-        fs.writeFileSync(filePath, processedImageBuffer);
-
-        await this.updateImage(id, type, fileName);
-
-        return {
-          status: 201,
-          message: 'file loaded successfully',
-          file_name: fileName
-        };
+      if (currentUser.email === data.email) {
+        delete data.email;
       } else {
-        throw new RpcException({
-          status: 400,
-          message: 'No file uploaded',
+        const emailExists = await this.users.findUnique({
+          where: { email: data.email },
+          select: { id: true }
         });
+
+        if (emailExists) {
+          return {
+            status: 409,
+            message: 'There is already a user with this email'
+          }
+        }
       }
+
+      const newUser = await this.users.update({
+        where: { id },
+        data: data,
+      });
+
+      const serializedUser = {
+        ...newUser,
+        roleId: Number(newUser.roleId),
+      };
+
+      const { image, password, ...cleanedUser } = serializedUser;
+
+      return {
+        status: 200,
+        message: 'User updated successfully',
+        newUserData: cleanedUser,
+      };
     } catch (error) {
       throw new RpcException({
         status: 500,
-        message: error.message || 'An error occurred while loading an image.',
+        message: error.message || 'An error occurred while updating the user.',
       });
     }
   }
 
-  async processImage(imageBuffer: Buffer): Promise<Buffer> {
-    const maxSize = 50 * 1024; // 50 KB
+  async changeStatusUser(id: string) {
+    try {
+      const user = await this.users.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
 
-    // the image exceeds 50 KB
-    if (imageBuffer.length > maxSize) {
-      let quality = 80;
-      let compressedBuffer = imageBuffer;
-
-      // reduce quality until size is less than 50 KB
-      while (compressedBuffer.length > maxSize && quality > 10) {
-        compressedBuffer = await sharp(imageBuffer)
-          .jpeg({ quality })
-          .toBuffer();
-        quality -= 10;
+      if (!user) {
+        return {
+          status: 204,
+          message: `User with id ${id} not found.`,
+        };
       }
 
-      return compressedBuffer;
+      const updatedStatus = !user.status;
+
+      await this.users.update({
+        where: { id },
+        data: { status: updatedStatus },
+      });
+
+      return {
+        status: 200,
+        message: 'User status updated successfully',
+        userId: id,
+        newStatus: updatedStatus,
+      };
+    } catch (error) {
+      throw new RpcException({
+        status: 500,
+        message: error.message || 'An error occurred while updating the user status.',
+      });
     }
-
-    // If none of the conditions are met, the original buffer is returned
-    return imageBuffer;
-  }
-
-  async updateImage(id: string, type: string, fileName: string) {
-    let oldPath = '';
-
-    switch (type) {
-      case 'users':
-        const user = await this.users.findUnique({
-          where: { id },
-          select: { image: true }
-        });
-
-        if (!user) return false;
-
-        oldPath = `${process.cwd()}/dist/uploads/users/${user.image}`;
-        this.deleteImage(oldPath);
-
-        await this.users.update({
-          where: { id },
-          data: { image: fileName }
-        });
-        return true;
-      case 'persons':
-        const person = await this.users.findUnique({
-          where: { id },
-          select: { image: true }
-        });
-
-        if (!person) return false;
-
-        oldPath = `${process.cwd()}/dist/uploads/persons/${person.image}`;
-        this.deleteImage(oldPath);
-
-        await this.users.update({
-          where: { id },
-          data: { image: fileName }
-        });
-        return true;
-    }
-  }
-
-  deleteImage(path: string) {
-    if (fs.existsSync(path)) {
-      fs.unlinkSync(path);
-    }
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} user`;
   }
 
   convertBigInts(obj: any) {
